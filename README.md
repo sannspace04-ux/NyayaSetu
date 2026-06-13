@@ -34,3 +34,28 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+# 🚀 Nyaya Setu
+
+A web application built to bridge gaps and provide accessible solutions, integrating full-stack web development with modern tech capabilities.
+
+---
+
+## 🛠️ Tech Stack & Prerequisites
+
+Before setting up the project, ensure you have the following installed on your local machine:
+* **Node.js** (v18 or higher recommended, includes `npm`)
+* **Git** for version control
+* **VS Code** (Recommended Editor)
+* **Kiro CLI** (If you are using the agentic terminal environment for development)
+
+---
+
+## 💻 Getting Started & Installation
+
+Follow these steps to clone the repository, install the necessary dependencies, and run the project locally on your machine:
+
+### 1. Clone the Repository
+```bash
+git clone [https://github.com/prathamdesai901-pixel/NyayaSetu.git](https://github.com/prathamdesai901-pixel/NyayaSetu.git)
+cd NyayaSetu
