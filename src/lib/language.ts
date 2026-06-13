@@ -44,6 +44,11 @@ export const translations: Record<string, Record<Language, string>> = {
   emergency: { en: "Emergency", hi: "आपातकाल" },
   callNow: { en: "Call Now", hi: "अभी कॉल करें" },
   requestCallback: { en: "Request Callback", hi: "कॉलबैक अनुरोध" },
+  searchHelplines: { en: "Search helplines, numbers or category...", hi: "हेल्पलाइन, नंबर या श्रेणी खोजें..." },
+  showingHelplines: { en: "Showing helplines", hi: "हेल्पलाइन दिखाई जा रही हैं" },
+  noHelplineFound: { en: "No helplines found", hi: "कोई हेल्पलाइन नहीं मिली" },
+  showAll: { en: "Show all", hi: "सभी दिखाएं" },
+  urgent: { en: "Urgent", hi: "जरूरी" },
 
   // Chat
   chatPlaceholder: { en: "Ask your legal question in English or Hindi...", hi: "अपना कानूनी प्रश्न अंग्रेजी या हिंदी में पूछें..." },
