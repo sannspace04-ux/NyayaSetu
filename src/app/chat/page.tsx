@@ -4,10 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import WatermarkLogo from "@/components/shared/WatermarkLogo";
-import { getOfflineAnswer } from "@/lib/offlineKnowledge";
 
-// ── Speech Recognition ────────────────────────────────────────────────────────
+// ── Speech Recognition ─────────────────────────────────────────────────────
 type SpeechRecognitionCtor = new () => {
   lang: string; interimResults: boolean; maxAlternatives: number;
   onstart: (() => void) | null; onend: (() => void) | null; onerror: (() => void) | null;
@@ -20,69 +18,77 @@ function getSpeechAPI(): SpeechRecognitionCtor | undefined {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition;
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
+// ── Types ──────────────────────────────────────────────────────────────────
 type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
   isOffline?: boolean;
-  attachments?: UploadedFile[];
 };
 
 type UploadedFile = {
-  id: string;
-  name: string;
-  type: string;
-  size: number;
-  dataUrl: string;      // for image preview
-  textContent: string;  // description passed to AI
+  id: string; name: string; type: string; size: number; dataUrl: string; textContent: string;
 };
 
-type AssistantMode = "online" | "offline";
+// ── Constants ──────────────────────────────────────────────────────────────
+const BG    = "#07111F";
+const CARD  = "#111827";
+const GOLD  = "#D4AF37";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const ACCEPTED_TYPES = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
-const MAX_FILE_SIZE_MB = 10;
+const SAHARA_GREETINGS = {
+  en: "Hello! I am Sahara AI, your legal assistant. How may I help you today?",
+  hi: "नमस्ते! मैं Sahara AI हूँ। मैं आपकी कानूनी सहायता के लिए यहाँ हूँ। मैं आपकी कैसे मदद कर सकती हूँ?",
+  hinglish: "Namaste! Main Sahara AI hoon. Aapke legal questions aur rights ke liye yahan hoon. Batayein, main kaise madad kar sakti hoon?",
+};
 
 const LEGAL_CATEGORIES = [
   "Consumer Rights", "Women Rights", "Child Rights", "Cyber Crime",
   "Property Disputes", "FIR Process", "Legal Aid / NALSA",
-  "Government Schemes", "Court Procedures", "Domestic Violence",
+  "Domestic Violence", "Court Procedures", "Senior Citizen",
 ];
 
 const SUGGESTED_PROMPTS = [
   "What are women's rights in India?",
-  "What are men's rights in India?",
   "FIR kaise file kare?",
   "Cyber fraud hua hai, kya karu?",
   "Property dispute me kya karna chahiye?",
-  "Domestic violence case me kya rights hain?",
+  "What is anticipatory bail?",
+  "Consumer complaint kaise karein?",
 ];
 
 const HELPLINES = [
-  { emoji: "🚨", label: "Emergency", number: "112" },
-  { emoji: "👮", label: "Police", number: "100" },
-  { emoji: "👩", label: "Women", number: "1091" },
-  { emoji: "💻", label: "Cyber", number: "1930" },
-  { emoji: "⚖️", label: "NALSA", number: "15100" },
-  { emoji: "🧒", label: "Child", number: "1098" },
+  { e: "🚨", l: "Emergency", n: "112" },
+  { e: "👮", l: "Police",    n: "100" },
+  { e: "👩", l: "Women",     n: "1091" },
+  { e: "💻", l: "Cyber",     n: "1930" },
+  { e: "⚖️", l: "NALSA",     n: "15100" },
+  { e: "👶", l: "Child",     n: "1098" },
 ];
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+const ACCEPTED_TYPES = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
+
+// ── Sub-components ─────────────────────────────────────────────────────────
 
 function TypingDots() {
   return (
     <div className="flex items-end gap-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-violet-500 to-primary text-base select-none">
-        👩‍⚖️
+      <div
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-[rgba(212,175,55,0.4)]"
+        style={{ background: `linear-gradient(135deg,${GOLD},#B8941E)` }}
+      >
+        <span className="text-sm">👩‍⚖️</span>
       </div>
-      <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-none border border-border bg-surface px-4 py-3 shadow-sm">
-        {[0, 0.2, 0.4].map((delay, i) => (
-          <span key={i} className="h-2 w-2 rounded-full bg-primary/50"
-            style={{ animation: `bounce-dot 0.8s ease-in-out ${delay}s infinite` }} />
+      <div
+        className="flex items-center gap-1.5 rounded-2xl rounded-bl-none px-4 py-3"
+        style={{ background: CARD, border: "1px solid rgba(212,175,55,0.2)" }}
+      >
+        {[0, 0.2, 0.4].map((d, i) => (
+          <span
+            key={i}
+            className="h-2 w-2 rounded-full"
+            style={{ background: GOLD, animation: `bounce-dot 0.7s ease-in-out ${d}s infinite`, opacity: 0.8 }}
+          />
         ))}
       </div>
     </div>
@@ -92,183 +98,124 @@ function TypingDots() {
 function FilePreviewBadge({ file, onRemove }: { file: UploadedFile; onRemove?: () => void }) {
   const isImage = file.type.startsWith("image/");
   return (
-    <div className="relative flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 shadow-sm max-w-[200px]">
-      {isImage ? (
-        <img src={file.dataUrl} alt={file.name} className="h-8 w-8 rounded-lg object-cover shrink-0" />
-      ) : (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 text-xs font-bold">PDF</div>
-      )}
+    <div
+      className="relative flex items-center gap-2 rounded-xl px-3 py-2 max-w-[180px]"
+      style={{ background: CARD, border: "1px solid rgba(212,175,55,0.2)" }}
+    >
+      {isImage
+        ? <img src={file.dataUrl} alt={file.name} className="h-8 w-8 rounded-lg object-cover shrink-0" />
+        : <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-900/50 text-red-400 text-xs font-bold">PDF</div>
+      }
       <div className="min-w-0">
-        <p className="text-xs font-medium text-primary truncate max-w-[110px]">{file.name}</p>
-        <p className="text-[10px] text-muted">{(file.size / 1024).toFixed(0)} KB</p>
+        <p className="text-xs font-medium text-white truncate max-w-[100px]">{file.name}</p>
+        <p className="text-[10px]" style={{ color: "#6B8098" }}>{(file.size / 1024).toFixed(0)} KB</p>
       </div>
       {onRemove && (
-        <button onClick={onRemove} className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white text-[9px] hover:bg-red-600"
-          aria-label="Remove file">✕</button>
+        <button onClick={onRemove} className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white text-[9px] hover:bg-red-600">✕</button>
       )}
     </div>
   );
 }
 
-function MessageBubble({ msg, userInitial }: { msg: Message; userInitial: string }) {
-  const isUser = msg.role === "user";
-
-  function renderContent(text: string) {
-    return text.split("\n").map((line, li, arr) => {
-      const parts = line.split(/(\*\*[^*]+\*\*)/g);
-      return (
-        <span key={li}>
-          {parts.map((part, pi) =>
-            part.startsWith("**") && part.endsWith("**")
-              ? <strong key={pi}>{part.slice(2, -2)}</strong>
-              : <span key={pi}>{part}</span>
-          )}
-          {li < arr.length - 1 && <br />}
-        </span>
-      );
-    });
-  }
-
-  return (
-    <div className={`flex items-end gap-2.5 ${isUser ? "flex-row-reverse" : ""}`}>
-      {/* Avatar */}
-      {isUser ? (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">{userInitial}</div>
-      ) : (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-primary-light ring-2 ring-accent/20">
-          <Image src="/logo.png" alt="AI" width={20} height={20} className="h-4 w-4 object-contain" />
-        </div>
-      )}
-
-      {/* Bubble */}
-      <div className={`max-w-[84%] space-y-2 ${isUser ? "items-end" : "items-start"} flex flex-col`}>
-        {/* Attachments above bubble (user messages only) */}
-        {isUser && msg.attachments && msg.attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 justify-end">
-            {msg.attachments.map(f => <FilePreviewBadge key={f.id} file={f} />)}
-          </div>
-        )}
-        <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
-          isUser
-            ? "rounded-br-none bg-primary text-white"
-            : "rounded-bl-none border border-border bg-surface text-primary"
-        }`}>
-          <div className="whitespace-pre-wrap break-words">{renderContent(msg.content)}</div>
-          {msg.isOffline && (
-            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">
-              📚 Offline Knowledge Base
-            </span>
-          )}
-          <p className={`mt-1.5 text-xs ${isUser ? "text-white/50" : "text-muted"}`}>
-            {msg.timestamp.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatusBadge({ mode }: { mode: AssistantMode }) {
-  if (mode === "online") {
+function renderContent(text: string) {
+  return text.split("\n").map((line, li, arr) => {
+    const parts = line.split(/(\*\*[^*]+\*\*)/g);
     return (
-      <p className="text-xs text-emerald-600 flex items-center gap-1">
-        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-        Online · Groq AI (Llama 3.3 70B) · Hindi / English / Hinglish
-      </p>
+      <span key={li}>
+        {parts.map((part, pi) =>
+          part.startsWith("**") && part.endsWith("**")
+            ? <strong key={pi} style={{ color: GOLD }}>{part.slice(2, -2)}</strong>
+            : <span key={pi}>{part}</span>
+        )}
+        {li < arr.length - 1 && <br />}
+      </span>
     );
-  }
-  return (
-    <p className="text-xs text-amber-600 flex items-center gap-1">
-      <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
-      Offline Mode · Built-in Legal Knowledge
-    </p>
-  );
-}
-
-// ── File reading utility ──────────────────────────────────────────────────────
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
   });
 }
 
-function buildFileTextDescription(file: UploadedFile): string {
-  const isImage = file.type.startsWith("image/");
-  return isImage
-    ? `[Image file uploaded: "${file.name}" (${(file.size / 1024).toFixed(0)} KB). This appears to be a photo/screenshot. Please acknowledge you've received this image evidence and provide relevant legal guidance based on the context of the user's question.]`
-    : `[PDF document uploaded: "${file.name}" (${(file.size / 1024).toFixed(0)} KB). This is a document — it could be an FIR copy, legal notice, agreement, bill, or court document. Please acknowledge receipt and provide relevant legal guidance based on the context of the user's question and the document type.]`;
-}
-
-// ── Main component ────────────────────────────────────────────────────────────
-
+// ── Main ───────────────────────────────────────────────────────────────────
 export default function ChatPage() {
   const { user } = useAuth();
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [mode, setMode] = useState<AssistantMode>("online");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [messages,      setMessages]      = useState<Message[]>([]);
+  const [input,         setInput]         = useState("");
+  const [isLoading,     setIsLoading]     = useState(false);
+  const [sidebarOpen,   setSidebarOpen]   = useState(false);
   const [sessionTopics, setSessionTopics] = useState<string[]>([]);
-  const [isListening, setIsListening] = useState(false);
-  const [ttsEnabled, setTtsEnabled] = useState(false);
-  const [hasTts, setHasTts] = useState(false);
-  const [hasStt, setHasStt] = useState(false);
+  const [isListening,   setIsListening]   = useState(false);
+  const [voiceMuted,    setVoiceMuted]    = useState(false);
+  const [hasTts,        setHasTts]        = useState(false);
+  const [hasStt,        setHasStt]        = useState(false);
+  const [pendingFiles,  setPendingFiles]  = useState<UploadedFile[]>([]);
+  const [uploadError,   setUploadError]   = useState<string | null>(null);
+  const [greetingLang,  setGreetingLang]  = useState<"en" | "hi" | "hinglish">("en");
 
-  // Evidence upload state
-  const [pendingFiles, setPendingFiles] = useState<UploadedFile[]>([]);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-
-  const endRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const endRef       = useRef<HTMLDivElement>(null);
+  const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
 
-  // Browser capability detection
+  // Capability check
   useEffect(() => {
     setHasTts(typeof window !== "undefined" && "speechSynthesis" in window);
     setHasStt(!!getSpeechAPI());
   }, []);
 
-  // Welcome message
+  // Sahara AI voice greeting
+  const saharaGreeting = useCallback((lang: "en" | "hi" | "hinglish") => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const text = SAHARA_GREETINGS[lang];
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate  = 0.88;
+    utterance.pitch = 1.1;
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v =>
+      v.name.includes("Samantha") ||
+      v.name.includes("Google UK English Female") ||
+      v.name.toLowerCase().includes("female")
+    );
+    if (preferred) utterance.voice = preferred;
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  // Welcome message + voice greeting
   useEffect(() => {
     const firstName = user?.full_name?.split(" ")[0] || null;
-    setMessages([{
-      id: "welcome",
-      role: "assistant",
-      content: firstName
-        ? `Namaste, ${firstName}! 🙏\n\nमैं Nyaya Setu का AI Legal Assistant हूँ। मैं आपको भारतीय कानून, आपके अधिकार और कानूनी प्रक्रियाओं के बारे में **हिंदी, English या Hinglish** में बता सकता हूँ।\n\nI am Nyaya Setu's AI Legal Assistant powered by **Groq AI (Llama 3.3 70B)**. Ask me anything about Indian law.\n\nYou can also **upload evidence** (PDF, images) for analysis. 📎\n\n⚠️ Disclaimer: यह सामान्य कानूनी जानकारी है, कानूनी सलाह नहीं। | This is general legal information, not formal legal advice.`
-        : `Namaste! 🙏\n\nमैं Nyaya Setu का AI Legal Assistant हूँ — powered by **Groq AI (Llama 3.3 70B)**.\n\nमैं हिंदी, English और Hinglish में भारतीय कानून के बारे में जानकारी देता हूँ।\n\nYou can also **upload evidence documents** (PDF, photos, screenshots) for analysis. 📎\n\n⚠️ Disclaimer: यह सामान्य कानूनी जानकारी है, कानूनी सलाह नहीं। | This is general legal information, not formal legal advice.`,
-      timestamp: new Date(),
-    }]);
+    const welcomeText = firstName
+      ? `Namaste, ${firstName}! 🙏\n\nमैं **Sahara AI** हूँ — Nyaya Setu का AI Legal Assistant.\n\nमैं भारतीय कानून, आपके अधिकार और कानूनी प्रक्रियाओं के बारे में **Hindi, English या Hinglish** में बता सकती हूँ।\n\nYou can also **upload evidence** (PDF, images) for analysis. 📎\n\n⚠️ This is general legal information, not formal legal advice. Consult a qualified advocate for your specific situation.`
+      : `Namaste! 🙏\n\nमैं **Sahara AI** हूँ — आपका AI Legal Assistant.\n\nभारतीय कानून के बारे में Hindi, English या Hinglish में पूछें। Evidence upload भी कर सकते हैं। 📎\n\n⚠️ General legal information only — not formal legal advice.`;
+
+    setMessages([{ id: "welcome", role: "assistant", content: welcomeText, timestamp: new Date() }]);
+
+    // Auto voice greeting after a short delay
+    const t = setTimeout(() => {
+      if (!voiceMuted) saharaGreeting(greetingLang);
+    }, 800);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Auto-scroll
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  // TTS
+  // TTS for AI responses
   const speak = useCallback((text: string) => {
-    if (!ttsEnabled || !hasTts) return;
+    if (voiceMuted || !hasTts) return;
     window.speechSynthesis.cancel();
     const clean = text.replace(/\*\*/g, "").replace(/⚠️[^\n]*/g, "").trim().slice(0, 500);
     const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.rate = 0.88;
+    utterance.rate  = 0.88;
     utterance.pitch = 1.05;
     const voices = window.speechSynthesis.getVoices();
     const preferred = voices.find(v =>
       v.name.includes("Samantha") || v.name.includes("Google UK English Female") ||
-      v.name.toLowerCase().includes("female") ||
-      (v.lang.startsWith("hi") && !v.name.toLowerCase().includes("male"))
+      v.name.toLowerCase().includes("female")
     );
     if (preferred) utterance.voice = preferred;
     window.speechSynthesis.speak(utterance);
-  }, [ttsEnabled, hasTts]);
+  }, [voiceMuted, hasTts]);
 
   // Voice input
   const toggleVoiceInput = () => {
@@ -280,115 +227,69 @@ export default function ChatPage() {
     rec.interimResults = false;
     rec.maxAlternatives = 1;
     rec.onstart = () => setIsListening(true);
-    rec.onend = () => setIsListening(false);
+    rec.onend   = () => setIsListening(false);
     rec.onerror = () => setIsListening(false);
     rec.onresult = (e) => setInput(e.results[0][0].transcript);
     recognitionRef.current = rec;
     rec.start();
   };
 
-  // ── Evidence upload handler ───────────────────────────────────────────────
+  // File upload
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setUploadError(null);
     const files = Array.from(e.target.files ?? []);
-    if (files.length === 0) return;
-
+    if (!files.length) return;
     const newFiles: UploadedFile[] = [];
     for (const file of files) {
       if (!ACCEPTED_TYPES.includes(file.type)) {
-        setUploadError(`"${file.name}" is not supported. Upload PDF, JPG, JPEG, or PNG.`);
-        continue;
+        setUploadError(`"${file.name}" not supported. Use PDF, JPG, or PNG.`); continue;
       }
-      if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-        setUploadError(`"${file.name}" exceeds ${MAX_FILE_SIZE_MB}MB limit.`);
-        continue;
+      if (file.size > 10 * 1024 * 1024) {
+        setUploadError(`"${file.name}" exceeds 10 MB.`); continue;
       }
-      const dataUrl = await readFileAsDataUrl(file);
-      const uploadedFile: UploadedFile = {
+      const dataUrl = await new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result as string);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const isImage = file.type.startsWith("image/");
+      newFiles.push({
         id: `f-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        dataUrl,
-        textContent: buildFileTextDescription({
-          id: "", name: file.name, type: file.type,
-          size: file.size, dataUrl, textContent: "",
-        }),
-      };
-      newFiles.push(uploadedFile);
+        name: file.name, type: file.type, size: file.size, dataUrl,
+        textContent: isImage
+          ? `[Image uploaded: "${file.name}" — please acknowledge and provide legal guidance]`
+          : `[PDF uploaded: "${file.name}" — FIR copy, legal notice, agreement or court document — please acknowledge and advise]`,
+      });
     }
-
     setPendingFiles(prev => [...prev, ...newFiles]);
-    // Reset input so the same file can be selected again
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const removePendingFile = (id: string) => {
-    setPendingFiles(prev => prev.filter(f => f.id !== id));
+  // Download chat as text
+  const downloadChat = () => {
+    const lines = messages.map(m =>
+      `[${m.role.toUpperCase()} ${m.timestamp.toLocaleTimeString("en-IN")}]\n${m.content}`
+    ).join("\n\n---\n\n");
+    const blob = new Blob([lines], { type: "text/plain" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `sahara-ai-chat-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  // ── Core: Groq → offline KB fallback ─────────────────────────────────────
-  const getAnswer = async (
-    userText: string,
-    history: Message[],
-    attachments: UploadedFile[]
-  ): Promise<{ text: string; isOffline: boolean }> => {
-    const messages = [
-      ...history
-        .filter(m => m.id !== "welcome" && !m.isOffline)
-        .map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })),
-      { role: "user", content: userText },
-    ];
-
-    const evidenceContext = attachments.length > 0
-      ? attachments.map(f => f.textContent).join("\n\n")
-      : undefined;
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages, evidenceContext }),
-      });
-
-      const data = await res.json();
-
-      if (data.fallback === true) {
-        console.warn("[Chat] Groq unavailable — using offline KB");
-        setMode("offline");
-        return { text: getOfflineAnswer(userText), isOffline: true };
-      }
-
-      if (!res.ok || data.error || !data.text) {
-        console.warn("[Chat] API error — offline KB:", data.error ?? "no text");
-        setMode("offline");
-        return { text: getOfflineAnswer(userText), isOffline: true };
-      }
-
-      setMode("online");
-      console.log("[Chat] ✅ Groq reply:", data.model, `${data.text.length} chars`);
-      return { text: data.text as string, isOffline: false };
-
-    } catch {
-      console.warn("[Chat] Network error — offline KB");
-      setMode("offline");
-      return { text: getOfflineAnswer(userText), isOffline: true };
-    }
-  };
-
-  // ── Send message ──────────────────────────────────────────────────────────
+  // Send message
   const sendMessage = async (text?: string) => {
     const userText = (text ?? input).trim();
     if (!userText || isLoading) return;
 
-    const attachmentsToSend = [...pendingFiles];
-
+    const attachments = [...pendingFiles];
     const userMsg: Message = {
-      id: `u-${Date.now()}`,
-      role: "user",
-      content: userText,
+      id: `u-${Date.now()}`, role: "user",
+      content: userText + (attachments.length ? `\n📎 ${attachments.map(f => f.name).join(", ")}` : ""),
       timestamp: new Date(),
-      attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
     };
 
     setMessages(prev => [...prev, userMsg]);
@@ -400,38 +301,51 @@ export default function ChatPage() {
 
     setSessionTopics(prev => {
       const topic = userText.slice(0, 45);
-      if (prev.length === 0) return [topic];
-      if (prev.includes(topic)) return prev;
-      return [topic, ...prev].slice(0, 8);
+      return prev.includes(topic) ? prev : [topic, ...prev].slice(0, 8);
     });
 
-    const { text: aiText, isOffline } = await getAnswer(userText, messages, attachmentsToSend);
+    try {
+      const history = messages
+        .filter(m => m.id !== "welcome")
+        .map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
 
-    setMessages(prev => [...prev, {
-      id: `a-${Date.now()}`,
-      role: "assistant",
-      content: aiText,
-      timestamp: new Date(),
-      isOffline,
-    }]);
-    speak(aiText);
-    setIsLoading(false);
-  };
+      const evidenceContext = attachments.map(f => f.textContent).join("\n") || undefined;
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: [...history, { role: "user", content: userText }], evidenceContext }),
+      });
+
+      const data = await res.json();
+      const aiText: string = data.text || data.fallback
+        ? (data.text || "I'm currently in offline mode. Please try again shortly.")
+        : "I could not process that. Please rephrase your question.";
+
+      setMessages(prev => [...prev, {
+        id: `a-${Date.now()}`, role: "assistant",
+        content: aiText, timestamp: new Date(), isOffline: !!data.fallback,
+      }]);
+      speak(aiText);
+    } catch {
+      setMessages(prev => [...prev, {
+        id: `e-${Date.now()}`, role: "assistant",
+        content: "I'm having connectivity issues. For urgent help: Police **100** · Women **1091** · Cyber **1930** · Emergency **112**\n\n⚠️ General legal information only — not formal legal advice.",
+        timestamp: new Date(), isOffline: true,
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const startNewChat = () => {
     setMessages([{
-      id: `welcome-${Date.now()}`,
-      role: "assistant",
-      content: "Namaste! 🙏 New conversation started.\n\nनई बातचीत शुरू हुई। हिंदी, English या Hinglish में अपना कानूनी प्रश्न पूछें।\n\n⚠️ Disclaimer: यह सामान्य कानूनी जानकारी है, कानूनी सलाह नहीं। | This is general legal information, not formal legal advice.",
+      id: `welcome-${Date.now()}`, role: "assistant",
+      content: "Namaste! 🙏\n\nNew conversation started with **Sahara AI**.\n\nHindi, English या Hinglish में अपना कानूनी प्रश्न पूछें।\n\n⚠️ General legal information only — not formal legal advice.",
       timestamp: new Date(),
     }]);
-    setPendingFiles([]);
-    setUploadError(null);
-    setSidebarOpen(false);
+    setPendingFiles([]); setUploadError(null); setSidebarOpen(false);
+    if (!voiceMuted) saharaGreeting(greetingLang);
   };
 
   const userInitial = user
@@ -439,131 +353,249 @@ export default function ChatPage() {
     : "U";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden" style={{ background: BG }}>
 
-      {/* ── Sidebar ─────────────────────────────────────────────────────────── */}
-      <aside className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-border bg-surface shadow-xl transition-transform duration-300 lg:relative lg:translate-x-0 lg:shadow-none ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
+      {/* ── Sidebar ─────────────────────────────────────────────────────── */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col shadow-2xl transition-transform duration-300 lg:relative lg:translate-x-0 lg:shadow-none ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+        style={{ background: "#0B1220", borderRight: "1px solid rgba(212,175,55,0.12)" }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3.5" style={{ borderBottom: "1px solid rgba(212,175,55,0.1)" }}>
           <Link href="/" className="flex items-center gap-2">
             <Image src="/logo.png" alt="Nyaya Setu" width={28} height={28} className="h-7 w-7 object-contain" />
-            <span className="font-serif text-sm font-bold text-primary">Nyaya Setu</span>
+            <span className="font-serif text-sm font-bold text-white">Nyaya<span style={{ color: GOLD }}>Setu</span></span>
           </Link>
-          <button onClick={() => setSidebarOpen(false)} className="rounded-lg p-1 text-muted hover:text-primary lg:hidden" aria-label="Close sidebar">✕</button>
+          <button onClick={() => setSidebarOpen(false)} className="rounded-lg p-1 text-[#6B8098] hover:text-white lg:hidden">✕</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
-          <button onClick={startNewChat} className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-primary-light active:scale-95">
-            + New Chat / नई बातचीत
+          <button
+            onClick={startNewChat}
+            className="w-full rounded-xl py-2.5 text-sm font-semibold text-[#07111F] transition-all hover:opacity-90 active:scale-95"
+            style={{ background: `linear-gradient(135deg,${GOLD},#B8941E)` }}
+          >
+            + New Chat
           </button>
+
+          {/* Greeting language picker */}
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "#6B8098" }}>Greeting Language</p>
+            <div className="flex gap-1.5">
+              {(["en","hi","hinglish"] as const).map(l => (
+                <button
+                  key={l}
+                  onClick={() => { setGreetingLang(l); if (!voiceMuted) saharaGreeting(l); }}
+                  className="flex-1 rounded-lg py-1.5 text-xs font-semibold transition-all"
+                  style={{
+                    background: greetingLang === l ? `rgba(212,175,55,0.2)` : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${greetingLang === l ? "rgba(212,175,55,0.5)" : "rgba(255,255,255,0.06)"}`,
+                    color: greetingLang === l ? GOLD : "#6B8098",
+                  }}
+                >
+                  {l === "en" ? "EN" : l === "hi" ? "HI" : "HGL"}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Legal categories */}
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Legal Areas / कानूनी विषय</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "#6B8098" }}>Legal Areas</p>
             <div className="flex flex-wrap gap-1.5">
               {LEGAL_CATEGORIES.map(cat => (
-                <button key={cat} onClick={() => { sendMessage(`Tell me about ${cat} in India`); setSidebarOpen(false); }}
-                  className="rounded-full bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary transition-all hover:bg-accent/15 hover:text-accent">
+                <button
+                  key={cat}
+                  onClick={() => { sendMessage(`Tell me about ${cat} in India`); setSidebarOpen(false); }}
+                  className="rounded-full px-2.5 py-1 text-xs font-medium transition-all hover:border-[rgba(212,175,55,0.5)] hover:text-[#D4AF37]"
+                  style={{ background: "rgba(212,175,55,0.06)", border: "1px solid rgba(212,175,55,0.14)", color: "#9EADC8" }}
+                >
                   {cat}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Emergency helplines */}
+          {/* Emergency */}
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Emergency / आपातकाल</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "#6B8098" }}>Emergency</p>
             <div className="grid grid-cols-2 gap-1.5">
               {HELPLINES.map(h => (
-                <a key={h.number} href={`tel:${h.number}`}
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted hover:border-primary/40 hover:text-primary transition-all">
-                  <span>{h.emoji}</span>
-                  <span className="font-semibold text-primary">{h.number}</span>
-                  <span className="text-[10px] text-muted">{h.label}</span>
+                <a key={h.n} href={`tel:${h.n}`}
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-all"
+                  style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(212,175,55,0.12)" }}
+                >
+                  <span>{h.e}</span>
+                  <span className="font-bold" style={{ color: GOLD }}>{h.n}</span>
+                  <span style={{ color: "#6B8098" }}>{h.l}</span>
                 </a>
               ))}
             </div>
           </div>
 
-          {/* Session history */}
+          {/* Session topics */}
           {sessionTopics.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">This Session</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "#6B8098" }}>This Session</p>
               <div className="space-y-1">
                 {sessionTopics.map((t, i) => (
-                  <div key={i} className="rounded-lg px-3 py-2 text-sm text-muted hover:bg-primary/5 truncate">{t}</div>
+                  <div key={i} className="truncate rounded-lg px-3 py-2 text-xs" style={{ color: "#9EADC8", background: "rgba(255,255,255,0.03)" }}>{t}</div>
                 ))}
               </div>
             </div>
           )}
         </div>
 
-        <div className="border-t border-border p-4">
+        <div className="p-4" style={{ borderTop: "1px solid rgba(212,175,55,0.1)" }}>
           {user
-            ? <Link href="/dashboard" className="flex items-center gap-2 text-sm text-muted hover:text-primary">← Dashboard</Link>
-            : <Link href="/login" className="flex items-center gap-2 text-sm font-semibold text-accent hover:underline">Login to save chats →</Link>
+            ? <Link href="/dashboard" className="flex items-center gap-2 text-sm text-[#6B8098] hover:text-white">← Dashboard</Link>
+            : <Link href="/login" className="text-sm font-semibold hover:underline" style={{ color: GOLD }}>Login to save chats →</Link>
           }
         </div>
       </aside>
 
-      {sidebarOpen && <div className="fixed inset-0 z-30 bg-black/30 lg:hidden" onClick={() => setSidebarOpen(false)} />}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
 
-      {/* ── Main chat area ─────────────────────────────────────────────────── */}
+      {/* ── Main chat ───────────────────────────────────────────────────── */}
       <div className="relative flex flex-1 flex-col overflow-hidden">
-        <WatermarkLogo opacity={0.04} size={380} />
 
         {/* Top bar */}
-        <div className="flex items-center justify-between border-b border-border bg-surface/90 px-4 py-3 backdrop-blur-md">
+        <div
+          className="flex items-center justify-between px-4 py-3 backdrop-blur-md"
+          style={{ background: "rgba(11,18,32,0.95)", borderBottom: "1px solid rgba(212,175,55,0.12)" }}
+        >
           <div className="flex items-center gap-3">
-            <button onClick={() => setSidebarOpen(true)} className="rounded-lg p-1.5 text-muted hover:text-primary lg:hidden" aria-label="Open sidebar">☰</button>
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-primary-light ring-2 ring-accent/25 shadow-sm">
-              <Image src="/logo.png" alt="AI" width={22} height={22} className="h-5 w-5 object-contain" />
+            <button onClick={() => setSidebarOpen(true)} className="rounded-lg p-1.5 text-[#6B8098] hover:text-white lg:hidden">☰</button>
+
+            {/* Sahara AI avatar */}
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full ring-2 ring-[rgba(212,175,55,0.4)] text-lg"
+              style={{ background: `linear-gradient(135deg,${GOLD},#B8941E)` }}
+            >
+              👩‍⚖️
             </div>
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-sm font-semibold text-primary">Nyaya AI Legal Assistant</p>
-                <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-primary/8 px-2 py-0.5 text-[10px] font-semibold text-primary border border-primary/20">
-                  🤖 AI Legal Assistant (Online + Offline Support)
-                </span>
-              </div>
-              <StatusBadge mode={mode} />
+              <p className="text-sm font-bold text-white">Sahara AI</p>
+              <p className="flex items-center gap-1 text-xs text-emerald-400">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                Legal Assistant · Hindi &amp; English &amp; Hinglish
+              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Voice mute toggle */}
             {hasTts && (
-              <button onClick={() => setTtsEnabled(v => !v)}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${ttsEnabled ? "border-accent bg-accent/10 text-accent" : "border-border text-muted hover:border-primary/40 hover:text-primary"}`}>
-                {ttsEnabled ? "🔊 Voice On" : "🔇 Voice Off"}
+              <button
+                onClick={() => setVoiceMuted(v => !v)}
+                title={voiceMuted ? "Enable voice" : "Mute voice"}
+                className="rounded-full px-3 py-1.5 text-xs font-medium transition-all"
+                style={{
+                  background: voiceMuted ? "rgba(255,255,255,0.06)" : "rgba(212,175,55,0.12)",
+                  border: `1px solid ${voiceMuted ? "rgba(255,255,255,0.1)" : "rgba(212,175,55,0.35)"}`,
+                  color: voiceMuted ? "#6B8098" : GOLD,
+                }}
+              >
+                {voiceMuted ? "🔇 Muted" : "🔊 Voice"}
               </button>
             )}
+
+            {/* Download chat */}
+            <button
+              onClick={downloadChat}
+              title="Download chat as text"
+              className="rounded-full px-3 py-1.5 text-xs font-medium text-[#6B8098] transition-all hover:text-white"
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+            >
+              ⬇ Save
+            </button>
           </div>
         </div>
 
-        {/* Disclaimer bar */}
-        <div className="border-b border-amber-100 bg-amber-50/80 px-4 py-1.5 backdrop-blur-sm">
-          <p className="text-center text-xs text-amber-700">
-            ⚠️ AI responses are informational only — not legal advice. Urgent help: Police <a href="tel:100" className="font-bold underline">100</a> · Women <a href="tel:1091" className="font-bold underline">1091</a> · Cyber <a href="tel:1930" className="font-bold underline">1930</a> · Emergency <a href="tel:112" className="font-bold underline">112</a>
-          </p>
+        {/* Disclaimer */}
+        <div
+          className="px-4 py-1.5 text-center text-xs"
+          style={{ background: "rgba(212,175,55,0.06)", borderBottom: "1px solid rgba(212,175,55,0.1)", color: "#B8941E" }}
+        >
+          ⚠️ Sahara AI provides general legal information only — not formal legal advice.
+          Urgent: Police <a href="tel:100" className="font-bold underline">100</a> ·
+          Women <a href="tel:1091" className="font-bold underline">1091</a> ·
+          Cyber <a href="tel:1930" className="font-bold underline">1930</a> ·
+          Emergency <a href="tel:112" className="font-bold underline">112</a>
         </div>
 
         {/* Messages */}
-        <div className="relative flex-1 overflow-y-auto px-4 py-6">
+        <div className="relative flex-1 overflow-y-auto px-4 py-6" style={{ background: BG }}>
           <div className="mx-auto max-w-2xl space-y-5">
-            {messages.map(msg => (
-              <MessageBubble key={msg.id} msg={msg} userInitial={userInitial} />
-            ))}
+            {messages.map(msg => {
+              const isUser = msg.role === "user";
+              return (
+                <div key={msg.id} className={`flex items-end gap-2.5 ${isUser ? "flex-row-reverse" : ""}`}>
+                  {/* Avatar */}
+                  {isUser ? (
+                    <div
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-[#07111F]"
+                      style={{ background: `linear-gradient(135deg,${GOLD},#B8941E)` }}
+                    >
+                      {userInitial}
+                    </div>
+                  ) : (
+                    <div
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm ring-2 ring-[rgba(212,175,55,0.4)]"
+                      style={{ background: `linear-gradient(135deg,${GOLD},#B8941E)` }}
+                    >
+                      👩‍⚖️
+                    </div>
+                  )}
+
+                  {/* Bubble */}
+                  <div
+                    className="max-w-[84%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-lg"
+                    style={isUser
+                      ? { background: `linear-gradient(135deg,${GOLD},#B8941E)`, color: "#07111F", fontWeight: 600, borderRadius: "16px 4px 16px 16px" }
+                      : { background: CARD, border: "1px solid rgba(212,175,55,0.18)", color: "#E2E8F0", borderRadius: "4px 16px 16px 16px" }
+                    }
+                  >
+                    <div className="whitespace-pre-wrap break-words">{renderContent(msg.content)}</div>
+                    {msg.isOffline && (
+                      <span
+                        className="mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
+                        style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.3)", color: "#F59E0B" }}
+                      >
+                        📚 Offline Mode
+                      </span>
+                    )}
+                    <p className="mt-1.5 text-xs" style={{ color: isUser ? "rgba(7,17,31,0.6)" : "#4A5568" }}>
+                      {msg.timestamp.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
             {isLoading && <TypingDots />}
             <div ref={endRef} />
           </div>
         </div>
 
-        {/* Suggested prompts — fresh chat only */}
+        {/* Suggested prompts */}
         {messages.length === 1 && (
-          <div className="px-4 pb-2">
+          <div className="px-4 pb-2" style={{ background: BG }}>
             <div className="mx-auto max-w-2xl flex flex-wrap gap-2 justify-center">
               {SUGGESTED_PROMPTS.map(p => (
-                <button key={p} onClick={() => sendMessage(p)}
-                  className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-muted shadow-sm transition-all hover:border-accent hover:bg-accent/5 hover:text-accent">
+                <button
+                  key={p}
+                  onClick={() => sendMessage(p)}
+                  className="rounded-full px-3 py-1.5 text-xs transition-all"
+                  style={{
+                    background: "rgba(212,175,55,0.07)",
+                    border: "1px solid rgba(212,175,55,0.2)",
+                    color: "#9EADC8",
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = GOLD; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(212,175,55,0.5)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "#9EADC8"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(212,175,55,0.2)"; }}
+                >
                   {p}
                 </button>
               ))}
@@ -571,52 +603,44 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* ── Input area ────────────────────────────────────────────────────── */}
-        <div className="border-t border-border bg-surface/90 px-4 py-3.5 backdrop-blur-md">
+        {/* Input area */}
+        <div
+          className="px-4 py-3.5 backdrop-blur-md"
+          style={{ background: "rgba(11,18,32,0.95)", borderTop: "1px solid rgba(212,175,55,0.12)" }}
+        >
           <div className="mx-auto max-w-2xl space-y-2">
-
-            {/* Pending file previews */}
             {pendingFiles.length > 0 && (
               <div className="flex flex-wrap gap-2 pb-1">
-                {pendingFiles.map(f => (
-                  <FilePreviewBadge key={f.id} file={f} onRemove={() => removePendingFile(f.id)} />
-                ))}
+                {pendingFiles.map(f => <FilePreviewBadge key={f.id} file={f} onRemove={() => setPendingFiles(prev => prev.filter(x => x.id !== f.id))} />)}
               </div>
             )}
-
-            {/* Upload error */}
-            {uploadError && (
-              <p className="text-xs text-red-600 flex items-center gap-1">
-                <span>⚠️</span> {uploadError}
-              </p>
-            )}
+            {uploadError && <p className="text-xs text-red-400">⚠️ {uploadError}</p>}
 
             <form onSubmit={e => { e.preventDefault(); sendMessage(); }} className="flex items-end gap-2">
-              {/* Hidden file input */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                multiple
-                className="hidden"
-                onChange={handleFileSelect}
-                aria-label="Upload evidence"
-              />
+              <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" multiple className="hidden" onChange={handleFileSelect} />
 
-              {/* Upload evidence button */}
+              {/* Attach */}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isLoading}
-                title="Upload Evidence | साक्ष्य अपलोड करें (PDF, JPG, PNG)"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-muted shadow-sm transition-all hover:border-primary hover:text-primary disabled:opacity-40"
-                aria-label="Upload Evidence"
+                title="Upload evidence (PDF, JPG, PNG)"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all disabled:opacity-40 hover:text-[#D4AF37]"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(212,175,55,0.2)", color: "#9EADC8" }}
               >
                 📎
               </button>
 
               {/* Textarea */}
-              <div className="flex-1 rounded-2xl border border-border bg-background px-4 py-3 shadow-sm transition-all focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
+              <div
+                className="flex-1 rounded-2xl px-4 py-3 transition-all"
+                style={{
+                  background: "rgba(7,17,31,0.8)",
+                  border: "1px solid rgba(212,175,55,0.2)",
+                }}
+                onFocus={e => (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(212,175,55,0.5)"}
+                onBlur={e  => (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(212,175,55,0.2)"}
+              >
                 <textarea
                   ref={textareaRef}
                   rows={1}
@@ -626,36 +650,49 @@ export default function ChatPage() {
                     e.target.style.height = "auto";
                     e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
                   }}
-                  onKeyDown={handleKeyDown}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
                   disabled={isLoading}
-                  placeholder="Hindi, English या Hinglish में पूछें… | Ask your legal question… (Enter to send)"
-                  className="w-full resize-none bg-transparent text-sm text-primary outline-none placeholder:text-muted disabled:opacity-50"
+                  placeholder="Hindi, English या Hinglish में पूछें… | Ask Sahara AI…"
+                  className="w-full resize-none bg-transparent text-sm text-white outline-none placeholder-[#4A5568] disabled:opacity-50"
                   style={{ maxHeight: "120px", overflowY: "auto" }}
                 />
               </div>
 
-              {/* Voice button */}
+              {/* Voice */}
               {hasStt && (
-                <button type="button" onClick={toggleVoiceInput} disabled={isLoading}
-                  title={isListening ? "Stop listening" : "Voice input (Hindi/English)"}
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border shadow-sm transition-all disabled:opacity-40 ${isListening ? "border-red-300 bg-red-50 text-red-500 animate-pulse" : "border-border bg-surface text-muted hover:border-primary hover:text-primary"}`}>
+                <button
+                  type="button"
+                  onClick={toggleVoiceInput}
+                  disabled={isLoading}
+                  title={isListening ? "Stop listening" : "Voice input"}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all disabled:opacity-40"
+                  style={{
+                    background: isListening ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.06)",
+                    border: `1px solid ${isListening ? "rgba(239,68,68,0.5)" : "rgba(212,175,55,0.2)"}`,
+                    color: isListening ? "#EF4444" : "#9EADC8",
+                    animation: isListening ? "gold-pulse 0.8s ease-in-out infinite" : "none",
+                  }}
+                >
                   🎤
                 </button>
               )}
 
-              {/* Send button */}
-              <button type="submit" disabled={isLoading || (!input.trim() && pendingFiles.length === 0)}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-md transition-all hover:bg-primary-light active:scale-95 disabled:opacity-40"
-                aria-label="Send message">
+              {/* Send */}
+              <button
+                type="submit"
+                disabled={isLoading || (!input.trim() && pendingFiles.length === 0)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#07111F] shadow-md transition-all active:scale-95 disabled:opacity-40"
+                style={{ background: `linear-gradient(135deg,${GOLD},#B8941E)`, boxShadow: `0 0 14px rgba(212,175,55,0.3)` }}
+                aria-label="Send"
+              >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />
                 </svg>
               </button>
             </form>
 
-            {/* Upload hint */}
-            <p className="text-center text-xs text-muted">
-              📎 Upload Evidence / साक्ष्य अपलोड करें (PDF, JPG, PNG) &nbsp;·&nbsp; हिंदी या English में टाइप करें
+            <p className="text-center text-xs" style={{ color: "#4A5568" }}>
+              Sahara AI · 📎 Upload Evidence · 🎤 Voice Input · ⬇ Save Chat · Hindi / English / Hinglish
             </p>
           </div>
         </div>

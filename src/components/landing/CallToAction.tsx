@@ -2,40 +2,65 @@ import Link from "next/link";
 
 export default function CallToAction() {
   return (
-    <section className="px-5 py-20 md:px-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="relative overflow-hidden rounded-3xl bg-primary px-6 py-14 text-center md:px-14 md:py-16">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(200,164,93,0.15),transparent_60%)]" />
+    <section
+      className="relative overflow-hidden px-5 py-20 md:px-8"
+      style={{ background: "linear-gradient(180deg, #0B1220 0%, #040810 100%)" }}
+    >
+      <div className="divider-gold absolute top-0 left-0 right-0" />
 
-          <div className="relative">
-            <h2 className="font-serif text-3xl font-bold text-white md:text-4xl">
-              Start your journey to legal clarity
-            </h2>
-            <p className="mx-auto mt-4 max-w-xl text-white/70">
-              Create a free account to access AI legal guidance, explore your rights,
-              and connect with legal resources — all in one place.
-            </p>
+      {/* Ambient glow */}
+      <div
+        className="pointer-events-none absolute left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[100px]"
+        style={{ background: "radial-gradient(circle, rgba(212,175,55,0.07) 0%, transparent 70%)" }}
+        aria-hidden="true"
+      />
 
-            <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Link
-                href="/signup"
-                className="rounded-full bg-accent px-8 py-3.5 text-sm font-semibold text-primary transition-all hover:-translate-y-0.5 hover:bg-accent-light hover:shadow-lg"
-              >
-                Create Free Account
-              </Link>
-              <Link
-                href="/login"
-                className="rounded-full border border-white/20 px-8 py-3.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-white/10"
-              >
-                Login
-              </Link>
-            </div>
+      <div className="relative z-10 mx-auto max-w-4xl text-center">
+        <span
+          className="inline-block rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-[#D4AF37]"
+          style={{ border: "1px solid rgba(212,175,55,0.3)", background: "rgba(212,175,55,0.07)" }}
+        >
+          Get Started
+        </span>
 
-            <p className="mt-6 text-xs text-white/40">
-              Platform under active development. Features are being expanded continuously.
-            </p>
-          </div>
+        <h2 className="mt-5 font-serif text-4xl font-bold text-white md:text-5xl lg:text-6xl">
+          Start Your Journey to<br />
+          <span className="gold-text">Legal Clarity</span>
+        </h2>
+
+        <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-[#6B8098] md:text-lg">
+          Create a free account to access AI legal guidance, explore your rights,
+          and connect with verified legal resources — all in one place.
+        </p>
+
+        <div className="mt-9 flex flex-col items-center justify-center gap-4 sm:flex-row">
+          <Link
+            href="/signup"
+            className="btn-gold inline-flex items-center gap-2.5 rounded-full px-9 py-4 text-sm font-bold tracking-wide"
+            style={{ boxShadow: "0 0 26px rgba(212,175,55,0.35)" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+            </svg>
+            Create Free Account
+          </Link>
+          <Link
+            href="/login"
+            className="btn-outline-gold inline-flex items-center gap-2 rounded-full px-9 py-4 text-sm font-semibold"
+          >
+            Login
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+            </svg>
+          </Link>
         </div>
+
+        <p className="mt-6 text-xs text-[#4A5568]">
+          Platform under active development · No credit card required · Free forever
+        </p>
+
+        {/* Decorative divider */}
+        <div className="divider-gold mx-auto mt-14 w-48" />
       </div>
     </section>
   );

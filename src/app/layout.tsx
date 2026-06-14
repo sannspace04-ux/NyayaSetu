@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { Inter, Libre_Baskerville } from "next/font/google";
 import "./globals.css";
 import { LanguageProvider } from "@/context/LanguageContext";
-import { AuthProvider } from "@/context/AuthContext";
+import { AuthProvider }     from "@/context/AuthContext";
+import { MusicProvider }    from "@/context/MusicContext";
+import MusicPrompt          from "@/components/shared/MusicPrompt";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -29,11 +31,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${inter.variable} ${libreBaskerville.variable} antialiased`}
-      >
+      <body className={`${inter.variable} ${libreBaskerville.variable} antialiased`}>
         <AuthProvider>
-          <LanguageProvider>{children}</LanguageProvider>
+          <LanguageProvider>
+            {/* MusicProvider wraps everything so audio persists across all pages */}
+            <MusicProvider>
+              {children}
+              {/* Ambient music opt-in prompt — shown once to first-time visitors */}
+              <MusicPrompt />
+            </MusicProvider>
+          </LanguageProvider>
         </AuthProvider>
       </body>
     </html>
